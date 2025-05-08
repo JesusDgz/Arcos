@@ -1,11 +1,23 @@
 <template>
   <v-container>
     <v-card class="pa-4" elevation="4">
-      <v-card-title class="text-h5 font-weight-bold">🧾 Crear Pedido - Modo Restaurante</v-card-title>
+      <v-toolbar flat class="px-2">
+        <v-toolbar-title class="text-h5 font-weight-bold">🧾 Crear Pedido</v-toolbar-title>
+
+        <v-btn color="red-darken-1" variant="tonal" @click="logout">
+          <v-icon start>mdi-logout</v-icon>
+          Salir
+        </v-btn>
+      </v-toolbar>
       <v-card-text>
         <v-form @submit.prevent="crearPedido">
-          <v-select label="Seleccionar productos" :items="productos" item-title="nombre" item-value="id"
-            v-model="productoSeleccionado" return-object dense hide-details clearable></v-select>
+          <v-select label="Seleccionar categoría" :items="categorias" v-model="categoriaSeleccionada" dense hide-details
+            clearable class="mb-4" />
+
+          <v-select v-if="categoriaSeleccionada" label="Seleccionar producto" :items="productosFiltrados"
+            item-title="nombre" item-value="id" v-model="productoSeleccionado" return-object dense hide-details
+            clearable class="mb-4" />
+
 
           <v-row class="mt-2" v-if="productoSeleccionado">
             <v-col cols="8">
@@ -42,6 +54,8 @@
           <div class="text-right text-h6 font-weight-bold">
             Total: ${{ totalPedido }}
           </div>
+          <v-text-field label="Mesa" v-model="mesa" dense outlined />
+
 
           <v-btn type="submit" color="success" block class="mt-4">Registrar Pedido</v-btn>
         </v-form>
@@ -55,20 +69,50 @@
 </template>
 
 <script setup>
-import { ref, onMounted,computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
+import Swal from 'sweetalert2'
 
-const productos = ref([])
+import { useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+
+
 const productoSeleccionado = ref(null)
 const cantidad = ref(1)
 const pedido = ref([])
 const totalPedido = computed(() => pedido.value.reduce((s, p) => s + p.precio * p.cantidad, 0))
 let ultimoPedidoId = null
 
+const router = useRouter()
+const userStore = useUserStore()
+
+
+const productos = ref([])
+const categorias = ref([])
+const mesa = ref('')
+const categoriaSeleccionada = ref(null)
+const productosFiltrados = computed(() =>
+  productos.value.filter(p => p.categoria === categoriaSeleccionada.value)
+)
+
 onMounted(async () => {
-  const { data } = await axios.get('/api/productos')
+  const { data } = await axios.get('/productos')
   productos.value = data.data
+  categorias.value = [...new Set(data.data.map(p => p.categoria))] // categorías únicas
 })
+
+
+
+const logout = () => {
+  userStore.logout()
+  Swal.fire({
+    icon: 'success',
+    title: 'Sesión cerrada',
+    showConfirmButton: false,
+    timer: 1200
+  })
+  router.push('/')
+}
 
 const agregarProducto = () => {
   if (!productoSeleccionado.value || cantidad.value < 1) return
@@ -83,21 +127,22 @@ const agregarProducto = () => {
 const eliminarProducto = (index) => {
   pedido.value.splice(index, 1)
 }
-
 const crearPedido = async () => {
   try {
     const pedidoPayload = {
       estado: 'pendiente',
       total: totalPedido.value,
-      cliente_id: 1, // Cliente genérico mesa
-      empleado_id: 1 // Mesero actual
+      cliente_id: 1, // o dinámico si lo deseas
+      empleado_id: userStore.usuario?.id || null, 
+      mesa: mesa.value
     }
 
-    const { data } = await axios.post('/api/pedidos', pedidoPayload)
+
+    const { data } = await axios.post('/pedidos', pedidoPayload)
     ultimoPedidoId = data.data.id
 
     for (const item of pedido.value) {
-      await axios.post('/api/detalle-pedidos', {
+      await axios.post('/detalle-pedidos', {
         pedido_id: ultimoPedidoId,
         producto_id: item.id,
         cantidad: item.cantidad,
@@ -105,24 +150,53 @@ const crearPedido = async () => {
       })
     }
 
-    alert('Pedido registrado')
     pedido.value = []
+    Swal.fire({
+      icon: 'success',
+      title: '✅ Pedido registrado correctamente',
+      showConfirmButton: false,
+      timer: 1500
+    })
   } catch (err) {
-    alert('Error al registrar pedido', err)
+    Swal.fire({
+      icon: 'error',
+      title: '❌ Error al registrar el pedido',
+      text: err.message || 'Ocurrió un problema inesperado'
+    })
+    console.log(err)
   }
 }
 
 const cancelarUltimoPedido = async () => {
-  if (!ultimoPedidoId) return alert('No hay pedido reciente para cancelar')
+  if (!ultimoPedidoId) {
+    Swal.fire({
+      icon: 'info',
+      title: 'ℹ️ No hay pedido para cancelar',
+      showConfirmButton: false,
+      timer: 1500
+    })
+    return
+  }
+
   try {
-    await axios.delete(`/api/pedidos/${ultimoPedidoId}`)
-    alert('Último pedido cancelado')
+    await axios.delete(`/pedidos/${ultimoPedidoId}`)
     ultimoPedidoId = null
     pedido.value = []
+    Swal.fire({
+      icon: 'success',
+      title: '✅ Pedido cancelado exitosamente',
+      showConfirmButton: false,
+      timer: 1500
+    })
   } catch (err) {
-    alert('No se pudo cancelar', err)
+    Swal.fire({
+      icon: 'error',
+      title: '❌ No se pudo cancelar el pedido',
+      text: err.message || 'Ocurrió un error inesperado'
+    })
   }
 }
+
 </script>
 
 <style scoped>
