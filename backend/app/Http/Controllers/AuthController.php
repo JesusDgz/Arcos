@@ -61,4 +61,4 @@ class AuthController extends Controller
             ]
         ]);
     }
-}
+}//Validacion del login
