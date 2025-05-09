@@ -318,7 +318,7 @@ const crearReporte = async () => {
       ...reporte.value,
       datos: JSON.parse(reporte.value.datos)
     }
-    await axios.post('/api/reportes', payload)
+    await axios.post('/reportes', payload)
     Swal.fire({ icon: 'success', title: 'Reporte creado' })
   } catch (err) {
     Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo crear el reporte' + err })
